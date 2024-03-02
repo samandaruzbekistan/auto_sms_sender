@@ -16,27 +16,23 @@ class SendSms extends StatefulWidget {
 }
 
 class _SendSmsState extends State<SendSms> {
-  String _canSendSMSMessage = 'Check is not run.';
   bool sendDirect = false;
   bool _isLoading = false;
-  bool _apiError = false;
-  bool _internetError = false;
+  int sended2 = 0;
+  int notSend2 = 0;
+  bool _permissionStatus = false;
   TextEditingController _controllerApi = TextEditingController();
   TextEditingController _controllerMessage = TextEditingController();
 
   List<Map<String, dynamic>> ordersData = [];
 
-
   Future<void> fetchData(String url, String message) async {
     var status = await Permission.sms.status;
-    int sended = 0;
-    int notSend = 0;
     var request = http.Request('GET', Uri.parse(url));
     final connectivityResult = await (Connectivity().checkConnectivity());
-    if(status.isDenied){
+    if (status.isDenied) {
       await Permission.sms.request();
-    }
-    else{
+    } else {
       if (connectivityResult != ConnectivityResult.none) {
         setState(() {
           _isLoading = true;
@@ -45,25 +41,29 @@ class _SendSmsState extends State<SendSms> {
         if (response.statusCode == 200) {
           var data = await response.stream.bytesToString();
           List<dynamic> numbers = json.decode(data);
-          if(numbers.length == 0){
+          if (numbers.length == 0) {
             setState(() {
               _isLoading = false;
             });
             _numbersError2(context);
-          }
-          else{
+          } else {
             numbers.forEach((number) async {
-              var result = await BackgroundSms.sendMessage(phoneNumber: "+998${number}", message: message);
-              if (result == SmsStatus.sent) {
-                sended++;
+              var result = await BackgroundSms.sendMessage(
+                  phoneNumber: "+998${number}", message: message);
+              if ("${result}" == "SmsStatus.sent") {
+                setState(() {
+                  sended2 = sended2 + 1;
+                });
               } else {
-                notSend++;
+                setState(() {
+                  notSend2 = notSend2 + 1;
+                });
               }
             });
             setState(() {
               _isLoading = false;
             });
-            _sendedAlert(context, sended, notSend);
+            _sendedAlert(context, sended2, notSend2);
           }
         } else {
           setState(() {
@@ -80,12 +80,32 @@ class _SendSmsState extends State<SendSms> {
     }
   }
 
+  @override
+  void initState() {
+    super.initState();
+    _checkPermissionStatus();
+  }
 
+  Future<void> _checkPermissionStatus() async {
+    final status = await Permission.sms.status;
+    if (status.isGranted) {
+      setState(() {
+        _permissionStatus = true;
+      });
+    }
+  }
 
+  Future<void> _requestPermission() async {
+    final status = await Permission.sms.request();
+    if(status.isGranted){
+      setState(() {
+        _permissionStatus = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-
     var width = MediaQuery.of(context).size.width;
     var height = MediaQuery.of(context).size.height;
     return Scaffold(
@@ -148,23 +168,11 @@ class _SendSmsState extends State<SendSms> {
                 maxLength: 70,
               ),
               SizedBox(
-                height: height * 0.01,
-              ),
-              SwitchListTile(
-                  title: const Text("To'g'ridan-to'g'ri yuborish"),
-                  subtitle: const Text(
-                      "Qo'shimcha dialog oynasini o'tkazib yuborishimiz kerakmi?"),
-                  value: sendDirect,
-                  onChanged: (bool newValue) {
-                    setState(() {
-                      sendDirect = newValue;
-                    });
-                  }),
-              SizedBox(
                 height: height * 0.04,
               ),
-              Container(
-                padding: EdgeInsets.symmetric(horizontal: width*0.04),
+              _permissionStatus
+                  ? Container(
+                padding: EdgeInsets.symmetric(horizontal: width * 0.04),
                 child: ElevatedButton(
                   onPressed: () async {
                     fetchData(_controllerApi.text, _controllerMessage.text);
@@ -183,10 +191,31 @@ class _SendSmsState extends State<SendSms> {
                     style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: width*0.05),
+                        fontSize: width * 0.05),
                   ),
                 ),
               )
+                  : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text("SMS yuborish uchun\nqurilmada ruxsat berilmagan", style: TextStyle(color: Colors.red),),
+                        ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10.0),
+                              ),
+
+                            ),
+                            onPressed: () async {
+                              await _requestPermission();
+                            },
+                            child: Text("Ruxsat berish", style: TextStyle(color: Colors.white),))
+                      ],
+                    ),
+              SizedBox(
+                height: height * 0.04,
+              ),
             ],
           ),
         ),
@@ -195,13 +224,32 @@ class _SendSmsState extends State<SendSms> {
   }
 }
 
-
 _numbersError2(context) {
   Alert(
     context: context,
     type: AlertType.error,
     title: "Xatolik!",
     desc: "Raqamlar soni 0 ta",
+    buttons: [
+      DialogButton(
+        child: Text(
+          "OK",
+          style: TextStyle(color: Colors.white, fontSize: 14),
+        ),
+        onPressed: () => Navigator.pop(context),
+        color: Colors.black,
+        radius: BorderRadius.circular(0.0),
+      ),
+    ],
+  ).show();
+}
+
+_permissionError2(context) {
+  Alert(
+    context: context,
+    type: AlertType.error,
+    title: "Xatolik!",
+    desc: "SMS yuborish uchun qurilmada ruxsat berilmagan",
     buttons: [
       DialogButton(
         child: Text(
