@@ -28,57 +28,69 @@ class _SendSmsState extends State<SendSms> {
 
   Future<void> fetchData(String url, String message) async {
     var status = await Permission.sms.status;
-    var request = http.Request('GET', Uri.parse(url));
     final connectivityResult = await (Connectivity().checkConnectivity());
+
     if (status.isDenied) {
       await Permission.sms.request();
-    } else {
-      if (connectivityResult != ConnectivityResult.none) {
-        setState(() {
-          _isLoading = true;
-        });
-        http.StreamedResponse response = await request.send();
-        if (response.statusCode == 200) {
-          var data = await response.stream.bytesToString();
-          List<dynamic> numbers = json.decode(data);
-          if (numbers.length == 0) {
-            setState(() {
-              _isLoading = false;
-            });
-            _numbersError2(context);
-          } else {
-            numbers.forEach((number) async {
-              var result = await BackgroundSms.sendMessage(
-                  phoneNumber: "+998${number}", message: message);
-              if ("${result}" == "SmsStatus.sent") {
-                setState(() {
-                  sended2 = sended2 + 1;
-                });
-              } else {
-                setState(() {
-                  notSend2 = notSend2 + 1;
-                });
-              }
-            });
-            setState(() {
-              _isLoading = false;
-            });
-            _sendedAlert(context, sended2, notSend2);
-          }
-        } else {
-          setState(() {
-            _isLoading = false;
-          });
-          _apiError2(context);
-        }
-      } else {
+      return; // Exit early if permission is not granted
+    }
+
+    if (connectivityResult == ConnectivityResult.none) {
+      _internetError2(context);
+      return; // Exit if there's no internet connectivity
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    http.Response response = await http.get(Uri.parse(url));
+
+    if (response.statusCode == 200) {
+      var data = json.decode(response.body);
+
+      if (data.isEmpty) {
         setState(() {
           _isLoading = false;
         });
-        _internetError2(context);
+        _numbersError2(context);
+        return; // Exit if there are no numbers to send SMS
       }
+
+      int sendedCount = 0;
+      int notSendCount = 0;
+
+      for (int i = 0; i < data.length; i++) {
+        var result = await BackgroundSms.sendMessage(
+          phoneNumber: "+998${data[i]}",
+          message: message,
+        );
+
+        if (result == SmsStatus.sent) {
+          sendedCount++;
+        } else {
+          notSendCount++;
+        }
+
+        if ((i + 1) % 20 == 0) {
+          // If 20 SMS sent, wait for 10 seconds
+          await Future.delayed(Duration(seconds: 10));
+        }
+      }
+
+      setState(() {
+        _isLoading = false;
+      });
+
+      _sendedAlert(context, sendedCount, notSendCount);
+    } else {
+      setState(() {
+        _isLoading = false;
+      });
+      _apiError2(context);
     }
   }
+
 
   @override
   void initState() {
@@ -97,7 +109,7 @@ class _SendSmsState extends State<SendSms> {
 
   Future<void> _requestPermission() async {
     final status = await Permission.sms.request();
-    if(status.isGranted){
+    if (status.isGranted) {
       setState(() {
         _permissionStatus = true;
       });
@@ -160,7 +172,7 @@ class _SendSmsState extends State<SendSms> {
                 controller: _controllerMessage,
                 decoration: const InputDecoration(
                   labelText: "SMS matni",
-                  suffixIcon: Icon(Icons.text_fields),
+                  suffixIcon: Icon(Icons.chat_bubble_outline),
                   border: OutlineInputBorder(),
                   helperMaxLines: 3,
                 ),
@@ -172,50 +184,59 @@ class _SendSmsState extends State<SendSms> {
               ),
               _permissionStatus
                   ? Container(
-                padding: EdgeInsets.symmetric(horizontal: width * 0.04),
-                child: ElevatedButton(
-                  onPressed: () async {
-                    fetchData(_controllerApi.text, _controllerMessage.text);
-                  },
-                  style: ElevatedButton.styleFrom(
-                    // elevation: 20,
-                    backgroundColor: Colors.blue,
-                    minimumSize: const Size.fromHeight(60),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(
-                    color: Colors.white,
-                  )
-                      : Text(
-                    "Yuborish",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: width * 0.05),
-                  ),
-                ),
-              )
+                      padding: EdgeInsets.symmetric(horizontal: width * 0.04),
+                      child: ElevatedButton(
+                        onPressed: () async {
+                          fetchData(
+                              _controllerApi.text, _controllerMessage.text);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          // elevation: 20,
+                          backgroundColor: Colors.blue,
+                          minimumSize: const Size.fromHeight(60),
+                        ),
+                        child: _isLoading
+                            ? const CircularProgressIndicator(
+                                color: Colors.white,
+                              )
+                            : Text(
+                                "Yuborish",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: width * 0.05),
+                              ),
+                      ),
+                    )
                   : Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text("SMS yuborish uchun\nqurilmada ruxsat berilmagan", style: TextStyle(color: Colors.red),),
+                        Text(
+                          "SMS yuborish uchun\nqurilmada ruxsat berilmagan",
+                          style: TextStyle(color: Colors.red),
+                        ),
                         ElevatedButton(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blue,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10.0),
                               ),
-
                             ),
                             onPressed: () async {
                               await _requestPermission();
                             },
-                            child: Text("Ruxsat berish", style: TextStyle(color: Colors.white),))
+                            child: Text(
+                              "Ruxsat berish",
+                              style: TextStyle(color: Colors.white),
+                            ))
                       ],
                     ),
               SizedBox(
-                height: height * 0.04,
+                height: height * 0.2,
               ),
+              Text("Dasturchi: Samandar Sariboyev", textAlign: TextAlign.center,),
+              Text("Websayt: goldapps.uz", textAlign: TextAlign.center,),
+              Text("Telegram: @Samandar_developer", textAlign: TextAlign.center,),
             ],
           ),
         ),

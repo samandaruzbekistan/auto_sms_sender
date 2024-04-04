@@ -1,4 +1,4 @@
-package uz.goldapps.auto_sms_sender.auto_sms_sender
+package uz.goldapps
 
 import io.flutter.embedding.android.FlutterActivity
 
